@@ -19,34 +19,91 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository and native submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
+      - name: Install modern GLSL compiler for Vulkan shaders
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes glslc
+          glslc --version
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: "3.38.10"
           cache: true
 
       - name: Install Flutter dependencies
         run: flutter pub get
 
       - name: Analyze Dart code
-        run: flutter analyze
+        shell: bash
+        run: |
+          set +e
+          analyze_log="$RUNNER_TEMP/flutter-analyze.log"
+          flutter analyze > "$analyze_log" 2>&1
+          analyze_status=$?
+          cat "$analyze_log"
+
+          # Surface analyzer diagnostics as check annotations so the actual
+          # findings are visible even when raw Actions logs are unavailable.
+          python3 - "$analyze_log" <<'PY'
+          import sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          for line in lines:
+              if " • " not in line:
+                  continue
+              severity = line.strip().split(" • ", 1)[0].lower()
+              command = {
+                  "error": "error",
+                  "warning": "warning",
+                  "info": "notice",
+              }.get(severity)
+              if command is None:
+                  continue
+              escaped = line.strip().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::{command}::{escaped}")
+          PY
+
+          exit "$analyze_status"
 
       - name: Run tests
         run: flutter test
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        shell: bash
+        run: |
+          set +e
+          build_log="$RUNNER_TEMP/flutter-build.log"
+          flutter build apk --debug > "$build_log" 2>&1
+          build_status=$?
+          cat "$build_log"
+
+          if [[ "$build_status" -ne 0 ]]; then
+            python3 - "$build_log" <<'PY'
+          import sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          details = "\n".join(lines[-40:])[-8000:]
+          escaped = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Flutter debug APK build failure::{escaped}")
+          PY
+          fi
+
+          exit "$build_status"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
