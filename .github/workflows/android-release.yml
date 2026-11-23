@@ -1,0 +1,122 @@
+name: Android Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-apk:
+    name: Build and publish signed APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository and native submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart code
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required GitHub Actions secret: ${name}" >&2
+              exit 1
+            fi
+          done
+
+          keystore_path="$RUNNER_TEMP/privatelm-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          chmod 600 "$keystore_path"
+          test -s "$keystore_path"
+
+          export KEYSTORE_PATH="$keystore_path"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def escape(value):
+              escaped = []
+              for index, char in enumerate(value):
+                  if char == "\\":
+                      escaped.append("\\\\")
+                  elif char == "\t":
+                      escaped.append("\\t")
+                  elif char == "\n":
+                      escaped.append("\\n")
+                  elif char == "\r":
+                      escaped.append("\\r")
+                  elif char == "\f":
+                      escaped.append("\\f")
+                  elif char in "=:#!" or (char == " " and index == 0):
+                      escaped.append("\\" + char)
+                  else:
+                      escaped.append(char)
+              return "".join(escaped)
+
+          properties = {
+              "storeFile": os.environ["KEYSTORE_PATH"],
+              "storePassword": os.environ["ANDROID_KEYSTORE_PASSWORD"],
+              "keyAlias": os.environ["ANDROID_KEY_ALIAS"],
+              "keyPassword": os.environ["ANDROID_KEY_PASSWORD"],
+          }
+          Path("android/key.properties").write_text(
+              "".join(f"{key}={escape(value)}\n" for key, value in properties.items()),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Build signed release APK
+        run: flutter build apk --release
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: privatelm-release-apk-${{ github.ref_name }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub release and attach APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: PrivateLM ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: build/app/outputs/flutter-apk/app-release.apk

@@ -4,6 +4,8 @@ class ChatSession {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? lastMessage;
+  /// Optional prompt that overrides the app-wide prompt for this session.
+  final String? systemPrompt;
 
   ChatSession({
     required this.id,
@@ -11,6 +13,7 @@ class ChatSession {
     DateTime? createdAt,
     DateTime? updatedAt,
     this.lastMessage,
+    this.systemPrompt,
   })  : title = title ?? 'New Chat',
         createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
@@ -21,6 +24,7 @@ class ChatSession {
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
         'lastMessage': lastMessage,
+        'systemPrompt': systemPrompt,
       };
 
   factory ChatSession.fromMap(Map<dynamic, dynamic> map) => ChatSession(
@@ -29,12 +33,17 @@ class ChatSession {
         createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
         updatedAt: DateTime.tryParse(map['updatedAt'] ?? '') ?? DateTime.now(),
         lastMessage: map['lastMessage'],
+        systemPrompt: map['systemPrompt'] is String
+            ? map['systemPrompt'] as String
+            : null,
       );
 
   ChatSession copyWith({
     String? title,
     DateTime? updatedAt,
     String? lastMessage,
+    String? systemPrompt,
+    bool clearSystemPrompt = false,
   }) =>
       ChatSession(
         id: id,
@@ -42,5 +51,7 @@ class ChatSession {
         createdAt: createdAt,
         updatedAt: updatedAt ?? DateTime.now(),
         lastMessage: lastMessage ?? this.lastMessage,
+        systemPrompt:
+            clearSystemPrompt ? null : systemPrompt ?? this.systemPrompt,
       );
 }

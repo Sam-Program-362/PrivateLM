@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:get/get.dart';
@@ -38,6 +39,9 @@ Color _sep(BuildContext c) => Theme.of(c).brightness == Brightness.dark
 
 class ChatView extends GetView<ChatController> {
   const ChatView({super.key});
+
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +184,22 @@ class ChatView extends GetView<ChatController> {
         );
       }),
       actions: [
+        if (_isAndroid)
+          Obx(() {
+            final hasOverride =
+                controller.currentSessionSystemPrompt?.trim().isNotEmpty ??
+                    false;
+            return IconButton(
+              tooltip: 'Session system prompt',
+              onPressed: () => _showSessionSystemPromptEditor(context),
+              icon: Icon(
+                Icons.psychology_alt_outlined,
+                color: hasOverride
+                    ? _appleBlue(context)
+                    : (isDark ? Colors.white : Colors.black),
+              ),
+            );
+          }),
         Obx(() {
           if (controller.messages.isEmpty) return const SizedBox.shrink();
           final usage = _contextUsage();
@@ -424,6 +444,80 @@ class ChatView extends GetView<ChatController> {
         ),
       ),
     );
+  }
+
+  Future<void> _showSessionSystemPromptEditor(BuildContext context) async {
+    // The prompt belongs to a session, so create that session before showing
+    // the editor if the user starts from the empty home state.
+    if (controller.currentSessionId.value.isEmpty) {
+      controller.createNewChat();
+    }
+
+    final promptController = TextEditingController(
+      text: controller.currentSessionSystemPrompt ?? '',
+    );
+    try {
+      final result = await showDialog<(bool, String?)>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Session system prompt'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'This prompt replaces the System prompt from Settings for '
+                    'this conversation only. Other chats are not affected.',
+                    style: Theme.of(dialogContext).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: promptController,
+                    minLines: 5,
+                    maxLines: 12,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Instructions for this chat',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop<(bool, String?)>(
+                dialogContext,
+                (true, null),
+              ),
+              child: const Text('Use global prompt'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop<(bool, String?)>(
+                dialogContext,
+                (true, promptController.text),
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+
+      if (result != null && result.$1) {
+        await controller.setCurrentSessionSystemPrompt(result.$2);
+      }
+    } finally {
+      promptController.dispose();
+    }
   }
 
   // ── Model Loading ──
