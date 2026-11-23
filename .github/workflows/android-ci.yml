@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository and native submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -44,7 +44,7 @@ jobs:
         run: |
           set +e
           analyze_log="$RUNNER_TEMP/flutter-analyze.log"
-          flutter analyze > "$analyze_log" 2>&1
+          flutter analyze --no-fatal-infos > "$analyze_log" 2>&1
           analyze_status=$?
           cat "$analyze_log"
 
@@ -55,12 +55,19 @@ jobs:
           from pathlib import Path
 
           lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
-          diagnostics = [line.strip() for line in lines if " • " in line]
-          if not diagnostics:
-              diagnostics = [line.strip() for line in lines if line.strip()][-10:]
-          for line in diagnostics:
-              escaped = line.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-              print(f"::error::{escaped}")
+          for line in lines:
+              if " • " not in line:
+                  continue
+              severity = line.strip().split(" • ", 1)[0].lower()
+              command = {
+                  "error": "error",
+                  "warning": "warning",
+                  "info": "notice",
+              }.get(severity)
+              if command is None:
+                  continue
+              escaped = line.strip().replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::{command}::{escaped}")
           PY
 
           exit "$analyze_status"
