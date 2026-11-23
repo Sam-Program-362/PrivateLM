@@ -110,10 +110,11 @@ set(CMAKE_MAKE_PROGRAM \"${CMAKE_MAKE_PROGRAM}\" CACHE FILEPATH \"\")
         set(_ndk_host linux-x86_64)
     endif()
     # The NDK's glslc (shaderc 2022.x) is too old for current ggml-vulkan
-    # shaders (cooperative matrix). Use a newer system glslc — e.g.
-    # `brew install shaderc` — and only fall back to the NDK's.
+    # shaders (cooperative matrix). Use a newer system glslc (for example,
+    # `brew install shaderc` on macOS or `apt install glslc` on Ubuntu) and
+    # only fall back to the NDK's.
     find_program(Vulkan_GLSLC_EXECUTABLE glslc
-        PATHS /opt/homebrew/bin /usr/local/bin ENV VULKAN_SDK
+        PATHS /opt/homebrew/bin /usr/local/bin /usr/bin ENV VULKAN_SDK
         PATH_SUFFIXES bin
         NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
     if(NOT Vulkan_GLSLC_EXECUTABLE)

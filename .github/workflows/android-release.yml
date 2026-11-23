@@ -29,6 +29,12 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Install modern GLSL compiler for Vulkan shaders
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes glslc
+          glslc --version
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
