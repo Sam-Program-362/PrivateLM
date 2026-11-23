@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import '../core/constants.dart';
 import '../core/haptics.dart';
+import '../core/system_prompt.dart';
 import '../core/ui.dart';
 import '../services/hive_service.dart';
 import '../services/app_log_service.dart';
@@ -636,16 +637,15 @@ class SettingsController extends GetxController {
     await _hive.setSetting(AppConstants.keyGlobalSystemPrompt, normalized);
   }
 
-  String effectiveSystemPromptForModel(String modelName) {
-    final prompt = globalSystemPrompt.value.trim();
-    final hasCustomPrompt =
-        prompt.isNotEmpty && prompt != AppConstants.systemPrompt;
-    if (hasCustomPrompt) return prompt;
-    if (AppConstants.isUncensoredModelName(modelName)) {
-      return AppConstants.uncensoredSystemPrompt;
-    }
-    return AppConstants.systemPrompt;
-  }
+  String effectiveSystemPromptForModel(
+    String modelName, {
+    String? sessionPrompt,
+  }) =>
+      resolveEffectiveSystemPrompt(
+        modelName: modelName,
+        globalPrompt: globalSystemPrompt.value,
+        sessionPrompt: sessionPrompt,
+      );
 
   Future<void> refreshNvidiaModels() async {
     if (nvidiaKey.value.trim().isEmpty) return;

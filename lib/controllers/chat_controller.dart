@@ -185,6 +185,30 @@ class ChatController extends GetxController {
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   }
 
+  /// Session-specific prompt editing is intentionally limited to Android.
+  bool get supportsSessionSystemPrompt => !kIsWeb && Platform.isAndroid;
+
+  ChatSession? get currentSession => sessions
+      .firstWhereOrNull((session) => session.id == currentSessionId.value);
+
+  String? get currentSessionSystemPrompt => currentSession?.systemPrompt;
+
+  Future<void> setCurrentSessionSystemPrompt(String? prompt) async {
+    if (!supportsSessionSystemPrompt) return;
+    final session = currentSession;
+    if (session == null) return;
+
+    final normalized = prompt?.trim();
+    final clearPrompt = normalized == null || normalized.isEmpty;
+    final updated = session.copyWith(
+      systemPrompt: clearPrompt ? null : normalized,
+      clearSystemPrompt: clearPrompt,
+    );
+    await _hive.saveSession(updated.id, updated.toMap());
+    final index = sessions.indexWhere((item) => item.id == updated.id);
+    if (index >= 0) sessions[index] = updated;
+  }
+
   void createNewChat() {
     final id = _uuid.v4();
     final session = ChatSession(id: id, title: 'New Chat');
@@ -1011,6 +1035,9 @@ class ChatController extends GetxController {
         : settings.selectedCloudModelName;
     return settings.effectiveSystemPromptForModel(
       modelName,
+      sessionPrompt: supportsSessionSystemPrompt
+          ? currentSessionSystemPrompt
+          : null,
     );
   }
 

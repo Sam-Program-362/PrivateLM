@@ -18,6 +18,7 @@ _Generated on pixel 6 with 20 step_
 - **Cloud API Fallback** — Seamlessly switch to OpenAI, Anthropic, Google Gemini, or Kimi (Moonshot AI) when you need more power or are on unsupported platforms.
 - **Multimodal Chat** — Send text and images in conversations. Vision support works with both local models (Qwen2-VL) and cloud providers.
 - **Persistent Sessions** — All chats and settings are stored locally via Hive. Nothing leaves your device unless you explicitly choose cloud mode.
+- **Android Session Prompts** — Set a prompt per chat to override the app-wide prompt for that conversation only; other chats remain isolated.
 - **Background Services** — Firebase Cloud Messaging integration for push updates and background task handling.
 - **Smart Auto-Configuration** — On first launch, the app detects your device's RAM and recommends optimal context size and token limits automatically.
 - **Task Management (in development)** — A task view for structured, multi-step AI workflows is being built. It is not available in the app yet.
@@ -153,11 +154,34 @@ upgrade only when it is signed with the same key as the installed APK.
 
 ```bash
 cp android/key.properties.example android/key.properties
-flutter build apk --release --split-per-abi
+flutter build apk --release
 ```
 
-Never rotate the signing key between GitHub releases. The per-ABI APKs must
-also keep increasing the build number in `pubspec.yaml`.
+Never rotate the signing key between GitHub releases. Increase the build
+number in `pubspec.yaml` for each Android release.
+
+#### Android GitHub Actions
+
+- **Android CI** runs on pushes and pull requests. It analyzes the Dart code,
+  runs the Flutter tests, builds a debug APK, and uploads it as the
+  `privatelm-debug-apk` workflow artifact.
+- **Android Release APK** runs when a tag beginning with `v` is pushed (for
+  example, `v1.0.8`). It builds and signs a release APK, uploads it as a
+  workflow artifact, and creates a GitHub release with the APK attached.
+
+Before the first tagged release, add these repository Actions secrets under
+**Settings → Secrets and variables → Actions**:
+
+- `ANDROID_KEYSTORE_BASE64` — the release keystore encoded as one base64 string
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+For example, on macOS, encode the keystore with
+`base64 < privatelm-release.jks | tr -d '\n'` (on Linux, use
+`base64 -w 0 privatelm-release.jks`). Keep the same keystore for all future
+updates. Update `pubspec.yaml`'s version/build number, push the change, then
+push a matching `v` tag to publish the release.
 
 ### iOS
 
