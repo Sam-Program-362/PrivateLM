@@ -76,7 +76,27 @@ jobs:
         run: flutter test
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        shell: bash
+        run: |
+          set +e
+          build_log="$RUNNER_TEMP/flutter-build.log"
+          flutter build apk --debug > "$build_log" 2>&1
+          build_status=$?
+          cat "$build_log"
+
+          if [[ "$build_status" -ne 0 ]]; then
+            python3 - "$build_log" <<'PY'
+          import sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          details = "\n".join(lines[-40:])[-8000:]
+          escaped = details.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Flutter debug APK build failure::{escaped}")
+          PY
+          fi
+
+          exit "$build_status"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
